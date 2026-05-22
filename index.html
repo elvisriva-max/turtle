@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aprende Python con Turtle 🐢</title>
     
-    <!-- Cargar Pyodide desde CDN -->
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+    <!-- Cargar Skulpt desde CDN (Especial para educación y Turtle en web) -->
+    <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js" type="text/javascript"></script>
     
     <style>
         * {
@@ -52,11 +53,6 @@
 
         .btn-ejecutar:hover {
             background-color: #219653;
-        }
-
-        .btn-ejecutar:disabled {
-            background-color: #7f8c8d;
-            cursor: not-allowed;
         }
 
         /* Contenedor principal de dos paneles */
@@ -112,10 +108,11 @@
             background-color: #f8f9fa;
             border-bottom: 2px solid #bdc3c7;
             position: relative;
+            overflow: auto;
         }
 
-        /* El ID 'target' es requerido específicamente por el módulo de turtle de Pyodide */
-        #target {
+        /* Contenedor específico donde Skulpt inyectará el canvas de la tortuga */
+        #canvas-tortuga {
             border: 1px solid #dfe6e9;
             background-color: white;
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
@@ -129,18 +126,7 @@
             font-family: monospace;
             overflow-y: auto;
             font-size: 0.9rem;
-        }
-
-        .status-loading {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background-color: #f39c12;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            font-weight: bold;
+            white-space: pre-wrap;
         }
     </style>
 </head>
@@ -148,7 +134,7 @@
 
     <header>
         <h1>Entorno de Aprendizaje: Python Turtle 🐢</h1>
-        <button class="btn-ejecutar" id="btnRun" onclick="ejecutarCodigo()" disabled>Cargando Python...</button>
+        <button class="btn-ejecutar" id="btnRun" onclick="ejecutarCodigo()">¡Ejecutar Código! ▶</button>
     </header>
 
     <div class="workspace">
@@ -159,99 +145,76 @@
 import turtle
 
 t = turtle.Turtle()
+t.shape("turtle")
 t.speed(3)
 t.color("royalblue")
 
-# Dibujemos un cuadrado para empezar
-for i in range(4):
-    t.forward(100)
-    t.left(90)
+# Dibujemos una estrella para tus alumnos
+for i in range(5):
+    t.forward(150)
+    t.right(144)
 </textarea>
         </div>
 
         <!-- Panel de Resultados -->
         <div class="panel-salida">
             <div class="contenedor-canvas">
-                <span id="status" class="status-loading">Inicializando entorno...</span>
-                <!-- Pyodide inyectará el lienzo directamente dentro de este div -->
-                <div id="target"></div>
+                <!-- Aquí Skulpt creará automáticamente el elemento canvas -->
+                <div id="canvas-tortuga"></div>
             </div>
-            <div class="panel-consola" id="consola">
-                > Consola del sistema lista...
-            </div>
+            <div class="panel-consola" id="consola">> Entorno listo. Escribe código y presiona Ejecutar...</div>
         </div>
     </div>
 
-    <script>
-        let pyodide;
+    <script type="text/javascript">
         const consolaElement = document.getElementById("consola");
-        const btnRun = document.getElementById("btnRun");
-        const statusElement = document.getElementById("status");
 
-        // Agregar logs a la consola de la pantalla
-        function registrarEnConsola(texto) {
-            consolaElement.innerHTML += `<br>> ${texto}`;
-            consolaElement.scrollTop = consolaElement.scrollHeight;
+        // Función auxiliar para capturar la salida de texto (print) de Python
+        function registrarSalidaTexto(texto) {
+            consolaElement.innerHTML += texto;
         }
 
-        // Inicializar Pyodide y preparar el entorno gráfico
-        async function inicializarEntorno() {
-            try {
-                pyodide = await loadPyodide();
-                
-                // Cargar el módulo específico de gráficos en micro-pantalla
-                await pyodide.loadPackage("micropip");
-                const micropip = pyodide.pyimport("micropip");
-                
-                // El módulo integrado en entornos web de Pyodide requiere configurar el target
-                registrarEnConsola("Configurando soporte gráfico para Turtle...");
-                
-                // Ejecución inicial para enlazar la salida gráfica al contenedor HTML
-                await pyodide.runPythonAsync(`
-                    import sys
-                    import document
-                    # Redefinir el destino del canvas de turtle
-                    document.getElementById("target").innerHTML = ""
-                `);
-
-                btnRun.disabled = false;
-                btnRun.innerText = "¡Ejecutar Código! ▶";
-                statusElement.style.backgroundColor = "#27ae60";
-                statusElement.innerText = "Listo";
-            } catch (error) {
-                registrarEnConsola("Error cargando el entorno: " + error.message);
-                statusElement.innerText = "Error de carga";
-                statusElement.style.backgroundColor = "#c0392b";
+        // Función para configurar el lector de archivos integrado de Skulpt
+        function leerModuloIntegrado(x) {
+            if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined) {
+                throw "Archivo no encontrado: '" + x + "'";
             }
+            return Sk.builtinFiles["files"][x];
         }
 
-        async function ejecutarCodigo() {
+        function ejecutarCodigo() {
             const codigo = document.getElementById("editor").value;
             
-            // Limpiar canvas anterior y consola antes de una nueva ejecución
-            document.getElementById("target").innerHTML = "";
-            consolaElement.innerHTML = "> Ejecutando código...";
+            // Limpiar la consola y el canvas antes de una nueva ejecución
+            consolaElement.innerHTML = "";
+            document.getElementById("canvas-tortuga").innerHTML = "";
             
-            try {
-                // Inyectamos un script inicial para asegurar que turtle apunte al contenedor correcto en cada iteración
-                await pyodide.runPythonAsync(`
-                    import sys
-                    import turtle
-                    # Forzar el reseteo del entorno gráfico de Pyodide antes de correr el script del alumno
-                    turtle.Screen().clear()
-                `);
+            // Configurar Skulpt para enlazar la salida de texto y el canvas gráfico
+            Sk.configure({
+                output: registrarSalidaTexto,
+                read: leerModuloIntegrado
+            });
 
-                // Ejecutar el código escrito por el usuario
-                await pyodide.runPythonAsync(codigo);
-                registrarEnConsola("Ejecución finalizada con éxito.");
-            } catch (err) {
-                // Capturar errores de sintaxis o de lógica del alumno y mostrarlos en la consola web
-                registrarEnConsola(`<span style="color: #ff7675;">Error de Python: ${err.message}</span>`);
-            }
+            // Indicar a Skulpt en qué contenedor HTML debe dibujar la tortuga
+            (Sk.TurtleGraphics || (Sk.TurtleGraphics = {})).target = 'canvas-tortuga';
+            // Opcional: Puedes definir el tamaño del área de dibujo
+            Sk.TurtleGraphics.width = 400;
+            Sk.TurtleGraphics.height = 400;
+
+            // Ejecutar el script
+            const miPromesaAbs = Sk.misceval.asyncToPromise(function() {
+                return Sk.importMainWithBody("<stdin>", false, codigo, true);
+            });
+
+            miPromesaAbs.then(function(modulo) {
+                consolaElement.innerHTML += "\n> Ejecución finalizada con éxito.";
+                consolaElement.scrollTop = consolaElement.scrollHeight;
+            }, function(err) {
+                // Captura errores de sintaxis o de lógica del código de los alumnos
+                consolaElement.innerHTML += `<span style="color: #ff7675;">\nError: ${err.toString()}</span>`;
+                consolaElement.scrollTop = consolaElement.scrollHeight;
+            });
         }
-
-        // Arrancar la carga al abrir la página
-        inicializarEntorno();
     </script>
 </body>
 </html>
