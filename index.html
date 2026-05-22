@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aprende Python con Turtle 🐢</title>
+    
+    <!-- Cargar Pyodide desde CDN -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f4f6f9;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+        }
+
+        .btn-ejecutar {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-ejecutar:hover {
+            background-color: #219653;
+        }
+
+        .btn-ejecutar:disabled {
+            background-color: #7f8c8d;
+            cursor: not-allowed;
+        }
+
+        /* Contenedor principal de dos paneles */
+        .workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Panel Izquierdo: Editor de Código */
+        .panel-codigo {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #1e1e1e;
+            padding: 10px;
+            border-right: 2px solid #bdc3c7;
+        }
+
+        .panel-codigo label {
+            color: #aaa;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        #editor {
+            flex: 1;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1rem;
+            padding: 15px;
+            border: none;
+            resize: none;
+            outline: none;
+            line-height: 1.5;
+        }
+
+        /* Panel Derecho: Consola y Canvas de Turtle */
+        .panel-salida {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #ffffff;
+        }
+
+        .contenedor-canvas {
+            flex: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #bdc3c7;
+            position: relative;
+        }
+
+        /* El ID 'target' es requerido específicamente por el módulo de turtle de Pyodide */
+        #target {
+            border: 1px solid #dfe6e9;
+            background-color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .panel-consola {
+            flex: 1;
+            background-color: #2d3748;
+            color: #a0aec0;
+            padding: 15px;
+            font-family: monospace;
+            overflow-y: auto;
+            font-size: 0.9rem;
+        }
+
+        .status-loading {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #f39c12;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Entorno de Aprendizaje: Python Turtle 🐢</h1>
+        <button class="btn-ejecutar" id="btnRun" onclick="ejecutarCodigo()" disabled>Cargando Python...</button>
+    </header>
+
+    <div class="workspace">
+        <!-- Panel de Código -->
+        <div class="panel-codigo">
+            <label for="editor">Escribe tu código de Python aquí:</label>
+            <textarea id="editor" spellcheck="false"># ¡Bienvenido al juego de la Tortuga!
+import turtle
+
+t = turtle.Turtle()
+t.speed(3)
+t.color("royalblue")
+
+# Dibujemos un cuadrado para empezar
+for i in range(4):
+    t.forward(100)
+    t.left(90)
+</textarea>
+        </div>
+
+        <!-- Panel de Resultados -->
+        <div class="panel-salida">
+            <div class="contenedor-canvas">
+                <span id="status" class="status-loading">Inicializando entorno...</span>
+                <!-- Pyodide inyectará el lienzo directamente dentro de este div -->
+                <div id="target"></div>
+            </div>
+            <div class="panel-consola" id="consola">
+                > Consola del sistema lista...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pyodide;
+        const consolaElement = document.getElementById("consola");
+        const btnRun = document.getElementById("btnRun");
+        const statusElement = document.getElementById("status");
+
+        // Agregar logs a la consola de la pantalla
+        function registrarEnConsola(texto) {
+            consolaElement.innerHTML += `<br>> ${texto}`;
+            consolaElement.scrollTop = consolaElement.scrollHeight;
+        }
+
+        // Inicializar Pyodide y preparar el entorno gráfico
+        async function inicializarEntorno() {
+            try {
+                pyodide = await loadPyodide();
+                
+                // Cargar el módulo específico de gráficos en micro-pantalla
+                await pyodide.loadPackage("micropip");
+                const micropip = pyodide.pyimport("micropip");
+                
+                // El módulo integrado en entornos web de Pyodide requiere configurar el target
+                registrarEnConsola("Configurando soporte gráfico para Turtle...");
+                
+                // Ejecución inicial para enlazar la salida gráfica al contenedor HTML
+                await pyodide.runPythonAsync(`
+                    import sys
+                    import document
+                    # Redefinir el destino del canvas de turtle
+                    document.getElementById("target").innerHTML = ""
+                `);
+
+                btnRun.disabled = false;
+                btnRun.innerText = "¡Ejecutar Código! ▶";
+                statusElement.style.backgroundColor = "#27ae60";
+                statusElement.innerText = "Listo";
+            } catch (error) {
+                registrarEnConsola("Error cargando el entorno: " + error.message);
+                statusElement.innerText = "Error de carga";
+                statusElement.style.backgroundColor = "#c0392b";
+            }
+        }
+
+        async function ejecutarCodigo() {
+            const codigo = document.getElementById("editor").value;
+            
+            // Limpiar canvas anterior y consola antes de una nueva ejecución
+            document.getElementById("target").innerHTML = "";
+            consolaElement.innerHTML = "> Ejecutando código...";
+            
+            try {
+                // Inyectamos un script inicial para asegurar que turtle apunte al contenedor correcto en cada iteración
+                await pyodide.runPythonAsync(`
+                    import sys
+                    import turtle
+                    # Forzar el reseteo del entorno gráfico de Pyodide antes de correr el script del alumno
+                    turtle.Screen().clear()
+                `);
+
+                // Ejecutar el código escrito por el usuario
+                await pyodide.runPythonAsync(codigo);
+                registrarEnConsola("Ejecución finalizada con éxito.");
+            } catch (err) {
+                // Capturar errores de sintaxis o de lógica del alumno y mostrarlos en la consola web
+                registrarEnConsola(`<span style="color: #ff7675;">Error de Python: ${err.message}</span>`);
+            }
+        }
+
+        // Arrancar la carga al abrir la página
+        inicializarEntorno();
+    </script>
+</body>
+</html>
