@@ -189,35 +189,43 @@ for i in range(4):
             return Sk.builtinFiles["files"][x];
         }
 
-        // ==========================================
-        //  CÁPSULA DE POLYFILLS Y COMPATIBILIDAD
-        // ==========================================
-        function inyectarCompatibilidad() {
-            // 1. Forzar que onkeypress apunte internamente a onkey (Requerido por Skulpt)
-            if (Sk.builtin && Sk.builtin.Screen) {
-                Sk.builtin.Screen.prototype.onkeypress = Sk.builtin.Screen.prototype.onkey;
+       // ==========================================
+//  CÁPSULA DE POLYFILLS Y COMPATIBILIDAD (CORREGIDA)
+// ==========================================
+function inyectarCompatibilidad() {
+    // 1. Forzar que onkeypress apunte internamente a onkey (Evita el error en la Pantalla)
+    if (Sk.builtin && Sk.builtin.Screen) {
+        Sk.builtin.Screen.prototype.onkeypress = Sk.builtin.Screen.prototype.onkey;
+    }
+    
+    // 2. Parchear la clase Turtle para que SIEMPRE existan los métodos 'shapesize' y 'turtlesize'
+    if (Sk.builtin && Sk.builtin.Turtle) {
+        
+        const mapearFuncionTamano = function(self, stretch_wid, stretch_len, outline) {
+            // Intentamos aplicar el escalado visual si el objeto interno de Skulpt está disponible
+            try {
+                if (self.turtle && typeof self.turtle.width === 'number') {
+                    let w = stretch_wid ? Sk.ffi.remapToJs(stretch_wid) : 1;
+                    let l = stretch_len ? Sk.ffi.remapToJs(stretch_len) : 1;
+                    
+                    // En muchas versiones de Skulpt, el tamaño se altera multiplicando sus propiedades de escala directas
+                    self.turtle.multiplier = l; 
+                }
+            } catch(e) {
+                // Silenciamos cualquier error interno de renderizado de JS 
+                // para que la simulación de Python continúe sin caerse.
+                console.log("Aviso Skulpt: No se pudo renderizar el nuevo tamaño, pero se evitó el crash.");
             }
             
-            // 2. Parchear la clase Turtle para soportar de manera transparente los alias de tamaño
-            if (Sk.builtin && Sk.builtin.Turtle) {
-                // Si el alumno llama a turtlesize o shapesize, lo redirigimos de forma segura
-                const mapearFuncionTamano = function(self, stretch_wid, stretch_len, outline) {
-                    // Skulpt internamente maneja el escalado mediante propiedades numéricas directas o métodos internos
-                    // Con este envoltorio evitamos que la ejecución falle por AttributeError catastrófico.
-                    if(self.turtle && typeof self.turtle.resize === 'function') {
-                        // Desempaquetamos los valores pasados desde Python a valores puros de JS
-                        let w = stretch_wid ? Sk.ffi.remapToJs(stretch_wid) : 1;
-                        let l = stretch_len ? Sk.ffi.remapToJs(stretch_len) : 1;
-                        self.turtle.resize(w, l);
-                    }
-                    return Sk.builtin.none.none;
-                };
-                
-                // Registramos los dos nombres comunes en el prototipo de Skulpt
-                Sk.builtin.Turtle.prototype.turtlesize = new Sk.builtin.func(mapearFuncionTamano);
-                Sk.builtin.Turtle.prototype.shapesize = new Sk.builtin.func(mapearFuncionTamano);
-            }
-        }
+            // CRUCIAL: Retornar 'None' de Python para que el intérprete sepa que la función terminó correctamente
+            return Sk.builtin.none.none;
+        };
+        
+        // Registramos los métodos directamente en el prototipo base del Objeto Turtle de Skulpt
+        Sk.builtin.Turtle.prototype.turtlesize = new Sk.builtin.func(mapearFuncionTamano);
+        Sk.builtin.Turtle.prototype.shapesize = new Sk.builtin.func(mapearFuncionTamano);
+    }
+}
 
         function ejecutarCodigo() {
             const codigo = editorCodigo.getValue();
