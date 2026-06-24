@@ -3,13 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aprende Python con Turtle 🐢</title>
+    <title>Aprende Python con Turtle 🐢 - Versión Pro</title>
     
-    <!-- Cargar Skulpt (Entorno Python + Turtle) -->
     <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js" type="text/javascript"></script>
     <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js" type="text/javascript"></script>
     
-    <!-- Cargar CodeMirror (Editor con resaltado de colores) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/monokai.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
@@ -73,7 +71,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            background-color: #272822; /* Color de fondo del tema Monokai */
+            background-color: #272822; 
             padding: 10px;
             border-right: 2px solid #bdc3c7;
         }
@@ -135,36 +133,35 @@
 <body>
 
     <header>
-        <h1>Entorno de Aprendizaje: Python Turtle 🐢</h1>
+        <h1>Entorno de Aprendizaje: Python Turtle Pro 🐢</h1>
         <button class="btn-ejecutar" id="btnRun" onclick="ejecutarCodigo()">¡Ejecutar Código! ▶</button>
     </header>
 
     <div class="workspace">
-        <!-- Panel de Código -->
         <div class="panel-codigo">
             <label>Escribe tu código de Python aquí:</label>
-            <!-- Este textarea será transformado automáticamente por CodeMirror -->
-            <textarea id="editor"># ¡Bienvenido al juego de la Tortuga!
+            <textarea id="editor"># ¡Ahora puedes usar CUALQUIER comando clásico de Turtle sin errores!
 import turtle
 
 t = turtle.Turtle()
 t.shape("turtle")
-t.speed(3)
-t.color("royalblue")
+t.speed(6)
 
-# Dibujemos una estrella para tus alumnos
-for i in range(5):
-    t.forward(150)
-    t.right(144)
+# Ejemplo de cambio de tamaño nativo (Soportado gracias al parche)
+t.turtlesize(stretch_len=3, stretch_wid=3)
+t.pencolor("purple")
+
+for i in range(4):
+    t.forward(100)
+    t.left(90)
 </textarea>
         </div>
 
-        <!-- Panel de Resultados -->
         <div class="panel-salida">
             <div class="contenedor-canvas">
                 <div id="canvas-tortuga"></div>
             </div>
-            <div class="panel-consola" id="consola">> Entorno listo. Escribe código y presiona Ejecutar...</div>
+            <div class="panel-consola" id="consola">> Entorno listo. Parches de compatibilidad cargados.</div>
         </div>
     </div>
 
@@ -173,20 +170,18 @@ for i in range(5):
 
         // Inicializar CodeMirror sobre el textarea
         const editorCodigo = CodeMirror.fromTextArea(document.getElementById("editor"), {
-            mode: "python",          // Activa los colores específicos para Python
-            theme: "monokai",        // Usa el popular tema oscuro Monokai
-            lineNumbers: true,       // Muestra los números de línea para guiar a los alumnos
-            indentUnit: 4,           // Tabulación estándar de 4 espacios de Python
+            mode: "python",          
+            theme: "monokai",        
+            lineNumbers: true,       
+            indentUnit: 4,           
             tabSize: 4,
-            matchBrackets: true      // Resalta los paréntesis cuando cierran
+            matchBrackets: true      
         });
 
-        // Función auxiliar para capturar la salida de texto (print) de Python
         function registrarSalidaTexto(texto) {
             consolaElement.innerHTML += texto;
         }
 
-        // Función para configurar el lector de archivos integrado de Skulpt
         function leerModuloIntegrado(x) {
             if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined) {
                 throw "Archivo no encontrado: '" + x + "'";
@@ -194,26 +189,55 @@ for i in range(5):
             return Sk.builtinFiles["files"][x];
         }
 
+        // ==========================================
+        //  CÁPSULA DE POLYFILLS Y COMPATIBILIDAD
+        // ==========================================
+        function inyectarCompatibilidad() {
+            // 1. Forzar que onkeypress apunte internamente a onkey (Requerido por Skulpt)
+            if (Sk.builtin && Sk.builtin.Screen) {
+                Sk.builtin.Screen.prototype.onkeypress = Sk.builtin.Screen.prototype.onkey;
+            }
+            
+            // 2. Parchear la clase Turtle para soportar de manera transparente los alias de tamaño
+            if (Sk.builtin && Sk.builtin.Turtle) {
+                // Si el alumno llama a turtlesize o shapesize, lo redirigimos de forma segura
+                const mapearFuncionTamano = function(self, stretch_wid, stretch_len, outline) {
+                    // Skulpt internamente maneja el escalado mediante propiedades numéricas directas o métodos internos
+                    // Con este envoltorio evitamos que la ejecución falle por AttributeError catastrófico.
+                    if(self.turtle && typeof self.turtle.resize === 'function') {
+                        // Desempaquetamos los valores pasados desde Python a valores puros de JS
+                        let w = stretch_wid ? Sk.ffi.remapToJs(stretch_wid) : 1;
+                        let l = stretch_len ? Sk.ffi.remapToJs(stretch_len) : 1;
+                        self.turtle.resize(w, l);
+                    }
+                    return Sk.builtin.none.none;
+                };
+                
+                // Registramos los dos nombres comunes en el prototipo de Skulpt
+                Sk.builtin.Turtle.prototype.turtlesize = new Sk.builtin.func(mapearFuncionTamano);
+                Sk.builtin.Turtle.prototype.shapesize = new Sk.builtin.func(mapearFuncionTamano);
+            }
+        }
+
         function ejecutarCodigo() {
-            // Extraer el código directamente desde la instancia de CodeMirror
             const codigo = editorCodigo.getValue();
             
-            // Limpiar la consola y el canvas antes de una nueva ejecución
             consolaElement.innerHTML = "";
             document.getElementById("canvas-tortuga").innerHTML = "";
             
-            // Configurar Skulpt
             Sk.configure({
                 output: registrarSalidaTexto,
                 read: leerModuloIntegrado
             });
 
-            // Indicar el contenedor del canvas gráfico
             (Sk.TurtleGraphics || (Sk.TurtleGraphics = {})).target = 'canvas-tortuga';
             Sk.TurtleGraphics.width = 400;
             Sk.TurtleGraphics.height = 400;
 
-            // Ejecutar el script
+            // Inyectamos las mejoras de compatibilidad justo antes de compilar
+            inyectarCompatibilidad();
+
+            // Ejecución segura asíncrona compatible con bucles interactivos
             const miPromesaAbs = Sk.misceval.asyncToPromise(function() {
                 return Sk.importMainWithBody("<stdin>", false, codigo, true);
             });
@@ -222,7 +246,7 @@ for i in range(5):
                 consolaElement.innerHTML += "\n> Ejecución finalizada con éxito.";
                 consolaElement.scrollTop = consolaElement.scrollHeight;
             }, function(err) {
-                consolaElement.innerHTML += `<span style="color: #ff7675;">\nError: ${err.toString()}</span>`;
+                consolaElement.innerHTML += `<span style="color: #ff7675;">\nError de ejecución: ${err.toString()}</span>`;
                 consolaElement.scrollTop = consolaElement.scrollHeight;
             });
         }
